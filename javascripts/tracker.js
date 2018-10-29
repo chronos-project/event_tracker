@@ -1,4 +1,4 @@
-window.axios = require('axios');
+// window.axios = require('axios');
 
 const getUserAgent = (usrAgentString) => {
   let sBrowser = 'unknown';
@@ -48,7 +48,9 @@ document.addEventListener('DOMContentLoaded', function(event) {
   document.addEventListener('click', function(event) {
     const target = event.target;
     if (target.tagName === 'A') {
-      console.log(getEventDetails(target));
+      const json = JSON.stringify(getEventDetails(target));
+      const status = navigator.sendBeacon('http://localhost:3000/api/events', json);
+      // console.log(getEventDetails(target));
     }
   })
 });
