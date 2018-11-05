@@ -1,5 +1,10 @@
 // window.axios = require('axios');
 
+// this snippet was found on SO and is exactly the same as used in Keen's tracker
+// for Node and older browsers. i'm assuming it is fine to use CnP, then. Just updated it
+// to use ES6
+let uuidv4;
+
 const getUserAgent = (usrAgentString) => {
   let sBrowser = 'unknown';
   let sUsrAg = usrAgentString;
@@ -28,29 +33,175 @@ const getUserAgent = (usrAgentString) => {
   return sBrowser;
 }
 
-const getEventDetails = (target) => {
+const getEventData = (eType, target, e) => {
+  const timestamp = Date.now();
+
+  switch (eType) {
+    case 'link_click':
+      return {
+        eType,
+        linkText: target.firstChild.textContent,
+        targetURL: target.href,
+        timestamp,
+      };
+      break;
+    case 'click':
+      return {
+        eType,
+        target_node: target.nodeName,
+        buttons: e.buttons,
+        x: e.clientX,
+        y: e.clientY,
+        timestamp,
+      }
+    case 'mouse_move':
+      return e.map(pos => {
+        return {
+          eType,
+          x: pos.x,
+          y: pos.y,
+          timestamp,
+        }
+      })
+    case 'key_press':
+      return {
+        eType,
+        key: e.key,
+        timestamp,
+      }
+    case 'form_submission':
+      const data = {
+        eType,
+      };
+      e.forEach(input => data[input.name] = input.value);
+
+      return data;
+    case 'pageview': {
+      return {
+        eType,
+        url: window.location.href,
+        title: document.title,
+        timestamp,
+      }
+    }
+    default:
+      return {};
+  }
+}
+
+const appendMetadataToEvent = (eType, target, e) => {
+  const eventAttrs = getEventData(eType, target, e);
+
   return {
-    clickAttrs: {
-      eType: 'click',
-      linkText: target.firstChild.textContent,
-      targetURL: target.href,
-    },
-    url: window.location.href,
-    userAgent: getUserAgent(navigator.userAgent),
-    pageTitle: document.title,
-    cookieAllowed: navigator.cookieEnabled,
-    language: navigator.language
+    eventAttrs,
+    metadata: {
+      url: window.location.href,
+      userAgent: getUserAgent(navigator.userAgent),
+      pageTitle: document.title,
+      cookieAllowed: navigator.cookieEnabled,
+      language: navigator.language,
+      uuid: uuidv4,
+    }
   }
 };
 
+const API_URL = 'http://localhost:3000/api/events';
 
 document.addEventListener('DOMContentLoaded', function(event) {
+  let mousePos;
+  let prevMousePos;
+
+  (() => {
+    const json = JSON.stringify(appendMetadataToEvent('pageview'));
+    const status = navigator.sendBeacon('http://localhost:3000/api/events', json);
+  })();
+
+  if (!window.sessionStorage.getItem('uuid')) {
+    const generateUuidv4 = (() => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    })();
+
+    window.sessionStorage.setItem('uuid', generateUuidv4);
+  }
+
+  uuidv4 = window.sessionStorage.getItem('uuid');
+
+  const Buffer = {
+    buffer: [],
+    size: 0,
+    max: 50,
+
+    add (event) {
+      this.buffer.push(event);
+      this.size += 1;
+      this.checkMax();
+    },
+
+    checkMax () {
+      if (this.size >= this.max) {
+        console.log('flushing!');
+        this.flush();
+      }
+    },
+
+    flush () {
+      const json = JSON.stringify(appendMetadataToEvent('mouse_move', '', this.buffer));
+
+      this.clear();
+      navigator.sendBeacon(`${API_URL}/mousemoves`, json);
+    },
+
+    clear () {
+      this.buffer = [];
+      this.size = 0;
+    }
+  }
+
   document.addEventListener('click', function(event) {
     const target = event.target;
     if (target.tagName === 'A') {
-      const json = JSON.stringify(getEventDetails(target));
+      const json = JSON.stringify(appendMetadataToEvent('link_click', target));
       const status = navigator.sendBeacon('http://localhost:3000/api/events', json);
-      // console.log(getEventDetails(target));
     }
-  })
+
+    // const json = JSON.stringify(appendMetadataToEvent('click', target, event));
+    // navigator.sendBeacon(API_URL, json);
+  });
+
+  document.addEventListener('mousemove', (event) => {
+    mousePos = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+  });
+
+  // document.addEventListener('keypress', (event) => {
+  //   const json = JSON.stringify(appendMetadataToEvent('key_press', '', event));
+  //
+  //   navigator.sendBeacon(API_URL, json);
+  // })
+  //
+  // document.addEventListener('submit', (event) => {
+  //   event.preventDefault();
+  //
+  //   const inputs = [...event.target.elements].filter(e => e.tagName === 'INPUT');
+  //   const json = JSON.stringify(appendMetadataToEvent('form_submission', '', inputs));
+  //
+  //   navigator.sendBeacon(API_URL, json);
+  // })
+
+  setInterval(() => {
+    const pos = mousePos;
+
+    if (pos) {
+      if (!prevMousePos || prevMousePos && pos !== prevMousePos) {
+        Buffer.add(pos);
+
+        prevMousePos = pos;
+      }
+    }
+  }, 100);
 });
