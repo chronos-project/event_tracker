@@ -1,9 +1,20 @@
-// window.axios = require('axios');
-
-// this snippet was found on SO and is exactly the same as used in Keen's tracker
+(function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+// this uuidv4 snippet was found on SO and is exactly the same as used in Keen's tracker
 // for Node and older browsers. i'm assuming it is fine to use CnP, then. Just updated it
 // to use ES6
-let uuidv4;
+
+if (!window.sessionStorage.getItem('uuid')) {
+  const generateUuidv4 = (() => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  })();
+
+  window.sessionStorage.setItem('uuid', generateUuidv4);
+}
+
+const uuidv4 = window.sessionStorage.getItem('uuid');
 
 const getUserAgent = (usrAgentString) => {
   let sBrowser = 'unknown';
@@ -33,36 +44,100 @@ const getUserAgent = (usrAgentString) => {
   return sBrowser;
 }
 
-const getEventData = (eType, target, e) => {
-  const timestamp = Date.now();
+const appendMetadataToEvents = (events) => {
+  return {
+    events,
+    metadata: {
+      url: window.location.href,
+      userAgent: getUserAgent(navigator.userAgent),
+      pageTitle: document.title,
+      cookieAllowed: navigator.cookieEnabled,
+      language: navigator.language,
+      uuid: uuidv4,
+    },
+  };
+};
+
+module.exports = {
+  getUserAgent,
+  appendMetadataToEvents,
+}
+
+},{}],2:[function(require,module,exports){
+const { getUserAgent, appendMetadataToEvents } = require('./metadata');
+const API_URL = 'http://localhost:3000/api';
+
+function createQueue(maxSize) {
+  let buffer = [];
+  let size = 0;
+  let max = maxSize;
+
+  const Queue = {
+    add (event) {
+      buffer.push(event);
+      size += 1;
+      this.checkMax();
+    },
+
+    checkMax () {
+      if (size >= max) {
+        console.log('flushing!');
+        this.flush();
+      }
+    },
+
+    flush () {
+      const json = JSON.stringify(appendMetadataToEvents(buffer));
+
+      this.clear();
+      navigator.sendBeacon(`${API_URL}/testing`, json);
+    },
+
+    clear () {
+      buffer = [];
+      size = 0;
+    },
+  }
+
+  return Object.create(Queue);
+}
+
+module.exports = createQueue;
+
+},{"./metadata":1}],3:[function(require,module,exports){
+// window.axios = require('axios');
+
+const createQueue = require('./queue');
+const queue = createQueue(50);
+
+const getEventData = (eType, e) => {
+  const timestamp = Date.now(); // NEEDS TO REFLECT CLIENT TIME -- must fix
 
   switch (eType) {
-    case 'link_click':
+    case 'link_clicks':
       return {
         eType,
-        linkText: target.firstChild.textContent,
-        targetURL: target.href,
+        linkText: e.target.firstChild.textContent,
+        targetURL: e.target.href,
         timestamp,
       };
       break;
-    case 'click':
+    case 'clicks':
       return {
         eType,
-        target_node: target.nodeName,
+        target_node: e.target.nodeName,
         buttons: e.buttons,
         x: e.clientX,
         y: e.clientY,
         timestamp,
       }
-    case 'mouse_move':
-      return e.map(pos => {
-        return {
-          eType,
-          x: pos.x,
-          y: pos.y,
-          timestamp,
-        }
-      })
+    case 'mouse_moves':
+      return {
+        eType,
+        x: e.x,
+        y: e.y,
+        timestamp,
+      };
     case 'key_press':
       return {
         eType,
@@ -70,10 +145,12 @@ const getEventData = (eType, target, e) => {
         timestamp,
       }
     case 'form_submission':
+      const inputs = [...e.target.elements].filter(e => e.tagName === 'INPUT');
       const data = {
         eType,
       };
-      e.forEach(input => data[input.name] = input.value);
+
+      inputs.forEach(input => data[input.name] = input.value);
 
       return data;
     case 'pageview': {
@@ -89,86 +166,29 @@ const getEventData = (eType, target, e) => {
   }
 }
 
-const appendMetadataToEvent = (eType, target, e) => {
-  const eventAttrs = getEventData(eType, target, e);
+const formatToJSON = (eType, e) => {
+  return JSON.stringify(getEventData(eType, e));
+}
 
-  return {
-    eventAttrs,
-    metadata: {
-      url: window.location.href,
-      userAgent: getUserAgent(navigator.userAgent),
-      pageTitle: document.title,
-      cookieAllowed: navigator.cookieEnabled,
-      language: navigator.language,
-      uuid: uuidv4,
-    }
-  }
-};
-
-const API_URL = 'http://localhost:3000/api/events';
+const addToQueue = (eType, e) => {
+  queue.add(formatToJSON(eType, e));
+}
 
 document.addEventListener('DOMContentLoaded', function(event) {
   let mousePos;
   let prevMousePos;
 
   (() => {
-    const json = JSON.stringify(appendMetadataToEvent('pageview'));
-    const status = navigator.sendBeacon('http://localhost:3000/api/events', json);
+    addToQueue('pageview');
   })();
 
-  if (!window.sessionStorage.getItem('uuid')) {
-    const generateUuidv4 = (() => {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-        let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    })();
-
-    window.sessionStorage.setItem('uuid', generateUuidv4);
-  }
-
-  uuidv4 = window.sessionStorage.getItem('uuid');
-
-  const Buffer = {
-    buffer: [],
-    size: 0,
-    max: 50,
-
-    add (event) {
-      this.buffer.push(event);
-      this.size += 1;
-      this.checkMax();
-    },
-
-    checkMax () {
-      if (this.size >= this.max) {
-        console.log('flushing!');
-        this.flush();
-      }
-    },
-
-    flush () {
-      const json = JSON.stringify(appendMetadataToEvent('mouse_move', '', this.buffer));
-
-      this.clear();
-      navigator.sendBeacon(`${API_URL}/mousemoves`, json);
-    },
-
-    clear () {
-      this.buffer = [];
-      this.size = 0;
-    }
-  }
-
   document.addEventListener('click', function(event) {
-    const target = event.target;
-    if (target.tagName === 'A') {
-      const json = JSON.stringify(appendMetadataToEvent('link_click', target));
-      const status = navigator.sendBeacon('http://localhost:3000/api/events', json);
+    if (event.target.tagName === 'A') {
+      addToQueue('link_clicks', event);
+      queue.flush();
     }
 
-    // const json = JSON.stringify(appendMetadataToEvent('click', target, event));
-    // navigator.sendBeacon(API_URL, json);
+    addToQueue('clicks', event);
   });
 
   document.addEventListener('mousemove', (event) => {
@@ -178,30 +198,30 @@ document.addEventListener('DOMContentLoaded', function(event) {
     }
   });
 
-  // document.addEventListener('keypress', (event) => {
-  //   const json = JSON.stringify(appendMetadataToEvent('key_press', '', event));
-  //
-  //   navigator.sendBeacon(API_URL, json);
-  // })
-  //
-  // document.addEventListener('submit', (event) => {
-  //   event.preventDefault();
-  //
-  //   const inputs = [...event.target.elements].filter(e => e.tagName === 'INPUT');
-  //   const json = JSON.stringify(appendMetadataToEvent('form_submission', '', inputs));
-  //
-  //   navigator.sendBeacon(API_URL, json);
-  // })
+  document.addEventListener('keypress', (event) => {
+    addToQueue('key_press', event);
+  });
+
+  document.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    addToQueue('form_submission', event);
+    queue.flush();
+    event.target.submit();
+  })
 
   setInterval(() => {
     const pos = mousePos;
 
     if (pos) {
       if (!prevMousePos || prevMousePos && pos !== prevMousePos) {
-        Buffer.add(pos);
+
+        addToQueue('mouse_moves', pos);
 
         prevMousePos = pos;
       }
     }
   }, 100);
 });
+
+},{"./queue":2}]},{},[3]);
