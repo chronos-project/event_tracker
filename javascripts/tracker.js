@@ -130,7 +130,7 @@ const getEventData = (eType, e) => {
         x: e.clientX,
         y: e.clientY,
         timestamp,
-      }
+      };
     case 'mouse_moves':
       return {
         eType,
@@ -143,7 +143,7 @@ const getEventData = (eType, e) => {
         eType,
         key: e.key,
         timestamp,
-      }
+      };
     case 'form_submission':
       const inputs = [...e.target.elements].filter(e => e.tagName === 'INPUT');
       const data = {
@@ -159,7 +159,7 @@ const getEventData = (eType, e) => {
         url: window.location.href,
         title: document.title,
         timestamp,
-      }
+      };
     }
     default:
       return {};
@@ -178,50 +178,73 @@ document.addEventListener('DOMContentLoaded', function(event) {
   let mousePos;
   let prevMousePos;
 
-  (() => {
-    addToQueue('pageview');
-  })();
+  const events = {"linkClicks":true,"clicks":true,"pageviews":true,"mousemoves":true,"formSubmits":true,"keypress":true};
 
-  document.addEventListener('click', function(event) {
-    if (event.target.tagName === 'A') {
-      addToQueue('link_clicks', event);
-      queue.flush();
-    }
+  if (events.pageviews) {
+    (() => {
+      addToQueue('pageview');
+    })();
+  }
 
-    addToQueue('clicks', event);
-  });
-
-  document.addEventListener('mousemove', (event) => {
-    mousePos = {
-      x: event.clientX,
-      y: event.clientY,
-    }
-  });
-
-  document.addEventListener('keypress', (event) => {
-    addToQueue('key_press', event);
-  });
-
-  document.addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    addToQueue('form_submission', event);
-    queue.flush();
-    event.target.submit();
-  })
-
-  setInterval(() => {
-    const pos = mousePos;
-
-    if (pos) {
-      if (!prevMousePos || prevMousePos && pos !== prevMousePos) {
-
-        addToQueue('mouse_moves', pos);
-
-        prevMousePos = pos;
+  if (events.clicks && events.linkClicks) {
+    document.addEventListener('click', function(event) {
+      if (event.target.tagName === 'A') {
+        addToQueue('link_clicks', event);
+        queue.flush();
       }
-    }
-  }, 100);
+
+      addToQueue('clicks', event);
+    });
+  } else if (events.clicks) {
+    document.addEventListener('click', function(event) {
+      addToQueue('clicks', event);
+    });
+  } else if (events.linkClicks) {
+    document.addEventListener('click', function(event) {
+      if (event.target.tagName === 'A') {
+        addToQueue('link_clicks', event);
+        queue.flush();
+      }
+    });
+  }
+
+  if (events.mousemoves) {
+    document.addEventListener('mousemove', (event) => {
+      mousePos = {
+        x: event.clientX,
+        y: event.clientY,
+      }
+    });
+
+    setInterval(() => {
+      const pos = mousePos;
+
+      if (pos) {
+        if (!prevMousePos || prevMousePos && pos !== prevMousePos) {
+
+          addToQueue('mouse_moves', pos);
+
+          prevMousePos = pos;
+        }
+      }
+    }, 100);
+  }
+
+  if (events.keypress) {
+    document.addEventListener('keypress', (event) => {
+      addToQueue('key_press', event);
+    });
+  }
+
+  if (events.formSubmits) {
+    document.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      addToQueue('form_submission', event);
+      queue.flush();
+      event.target.submit();
+    });
+  }
 });
 
 },{"./queue":2}]},{},[3]);

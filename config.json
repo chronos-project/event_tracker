@@ -1,0 +1,12 @@
+{
+  "queueSize": 50,
+  "errorHandling": false,
+  "events": {
+    "linkClicks": true,
+    "clicks": true,
+    "pageviews": true,
+    "mousemoves": true,
+    "formSubmits": true,
+    "keypress": true
+  }
+}
