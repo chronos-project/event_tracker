@@ -1,4 +1,5 @@
 const { getUserAgent, appendMetadataToEvents } = require('./metadata');
+const sendData = require('./sendData');
 const API_URL = 'http://localhost:3000/api';
 
 function createQueue(maxSize) {
@@ -24,7 +25,7 @@ function createQueue(maxSize) {
       const json = JSON.stringify(appendMetadataToEvents(buffer));
 
       this.clear();
-      navigator.sendBeacon(`${API_URL}/testing`, json);
+      sendData(`${API_URL}/testing`, json);
     },
 
     clear () {

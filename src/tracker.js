@@ -59,12 +59,12 @@ const getEventData = (eType, e) => {
   }
 }
 
-const formatToJSON = (eType, e) => {
-  return JSON.stringify(getEventData(eType, e));
-}
+// const formatToJSON = (eType, e) => {
+//   return JSON.stringify(getEventData(eType, e));
+// }
 
 const addToQueue = (eType, e) => {
-  queue.add(formatToJSON(eType, e));
+  queue.add(getEventData(eType, e));
 }
 
 document.addEventListener('DOMContentLoaded', function(event) {

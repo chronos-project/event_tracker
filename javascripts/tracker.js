@@ -65,6 +65,7 @@ module.exports = {
 
 },{}],2:[function(require,module,exports){
 const { getUserAgent, appendMetadataToEvents } = require('./metadata');
+const sendData = require('./sendData');
 const API_URL = 'http://localhost:3000/api';
 
 function createQueue(maxSize) {
@@ -90,7 +91,7 @@ function createQueue(maxSize) {
       const json = JSON.stringify(appendMetadataToEvents(buffer));
 
       this.clear();
-      navigator.sendBeacon(`${API_URL}/testing`, json);
+      sendData(`${API_URL}/testing`, json);
     },
 
     clear () {
@@ -104,7 +105,29 @@ function createQueue(maxSize) {
 
 module.exports = createQueue;
 
-},{"./metadata":1}],3:[function(require,module,exports){
+},{"./metadata":1,"./sendData":3}],3:[function(require,module,exports){
+const sendData = (url, json) => {
+  if (true) {
+    fetch(url, {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: json,
+    })
+    .then(response => response.json())
+    .then(json => console.log(json))
+    .catch(error => console.log(error));
+  } else {
+    // const blob = new Blob([json], {type: 'application/json; charset=utf-8'});
+    navigator.sendBeacon(url, json);
+  }
+}
+
+module.exports = sendData;
+
+},{}],4:[function(require,module,exports){
 // window.axios = require('axios');
 
 const createQueue = require('./queue');
@@ -166,19 +189,19 @@ const getEventData = (eType, e) => {
   }
 }
 
-const formatToJSON = (eType, e) => {
-  return JSON.stringify(getEventData(eType, e));
-}
+// const formatToJSON = (eType, e) => {
+//   return JSON.stringify(getEventData(eType, e));
+// }
 
 const addToQueue = (eType, e) => {
-  queue.add(formatToJSON(eType, e));
+  queue.add(getEventData(eType, e));
 }
 
 document.addEventListener('DOMContentLoaded', function(event) {
   let mousePos;
   let prevMousePos;
 
-  const events = {"linkClicks":true,"clicks":true,"pageviews":true,"mousemoves":true,"formSubmits":true,"keypress":true};
+  const events = {"linkClicks":true,"clicks":true,"pageviews":true,"mousemoves":false,"formSubmits":true,"keypress":true};
 
   if (events.pageviews) {
     (() => {
@@ -247,4 +270,4 @@ document.addEventListener('DOMContentLoaded', function(event) {
   }
 });
 
-},{"./queue":2}]},{},[3]);
+},{"./queue":2}]},{},[4]);
